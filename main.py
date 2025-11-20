@@ -4,7 +4,16 @@ import os
 
 app = FastAPI()
 
-id_to_title_db = {}
+# Global dictionary to store the mapping
+# Structure: 
+# {
+#   'tt1234567': {
+#       'title': 'Batman', 
+#       'cast': 'Actor A, Actor B', 
+#       'poster_path': 'https://...'
+#    }
+# }
+movie_db = {}
 
 @app.on_event("startup")
 def load_data():
@@ -17,39 +26,47 @@ def load_data():
 
     try:
         with open(filename, mode="r", encoding="utf-8") as f:
-            # Assuming the CSV has headers: imdb_id,title
+            # vital: CSV must have headers like: imdb_id,title,cast,poster_path
             reader = csv.DictReader(f)
             
             count = 0
             for row in reader:
-                # Clean keys just in case of whitespace
-                if 'imdb_id' in row and 'title' in row:
+                # robust extraction (handles missing columns gracefully)
+                if 'imdb_id' in row:
                     imdb_id = row['imdb_id'].strip()
-                    title = row['title'].strip()
-                    id_to_title_db[imdb_id] = title
+                    
+                    # Store as a lightweight dictionary
+                    movie_db[imdb_id] = {
+                        "title": row.get('title', '').strip(),
+                        "cast": row.get('cast', '').strip(),
+                        "poster_path": row.get('poster_path', '').strip()
+                    }
                     count += 1
             
-            print(f"Success! Loaded {count} titles into memory.")
+            print(f"Success! Loaded {count} movies into memory.")
             
     except Exception as e:
         print(f"Error reading CSV: {e}")
 
 @app.get("/")
 def home():
-    return {"message": "IMDB ID to Title Service is running."}
+    return {"message": "Movie Details Service is running."}
 
 @app.get("/get_title")
-def get_title(imdb_id: str):
+def get_movie_details(imdb_id: str):
     """
-    Endpoint: Returns the title for a given IMDB ID.
+    Endpoint: Returns title, cast, and poster_path for a given IMDB ID.
     """
     # O(1) lookup speed
-    title = id_to_title_db.get(imdb_id)
+    movie_data = movie_db.get(imdb_id)
     
-    if not title:
+    if not movie_data:
         raise HTTPException(status_code=404, detail="ID not found in database")
     
+    # Construct the response
     return {
         "imdb_id": imdb_id,
-        "title": title
+        "title": movie_data['title'],
+        "cast": movie_data['cast'],
+        "poster_path": movie_data['poster_path']
     }
